@@ -1,0 +1,1253 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Svensk OSINT – GDELT-flöde</title>
+  <meta name="description" content="Ett kategoriserat GDELT-flöde för OSINT, säkerhet, underrättelser och kritisk infrastruktur." />
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121936;
+      --panel-2: #0f1731;
+      --text: #eef2ff;
+      --muted: #aab3d4;
+      --line: rgba(255,255,255,.12);
+      --accent: #9db7ff;
+      --accent-2: #b9f5d8;
+      --danger: #ffb4b4;
+      --warn: #ffe0a3;
+      --shadow: 0 18px 60px rgba(0,0,0,.35);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(92, 126, 255, .24), transparent 32rem),
+        radial-gradient(circle at 80% 0%, rgba(48, 191, 122, .16), transparent 28rem),
+        var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .wrap {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 28px 0 56px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 24px;
+      align-items: end;
+      margin-bottom: 22px;
+    }
+
+    .eyebrow {
+      color: var(--accent-2);
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      font-size: .78rem;
+      margin-bottom: 8px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2rem, 5vw, 4rem);
+      letter-spacing: -.055em;
+      line-height: .95;
+    }
+
+    .lead {
+      max-width: 780px;
+      color: var(--muted);
+      margin: 16px 0 0;
+      font-size: 1rem;
+    }
+
+    .statusbox {
+      background: rgba(18, 25, 54, .72);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+      min-width: 260px;
+    }
+
+    .statusbox strong { display: block; font-size: .9rem; margin-bottom: 4px; }
+    .statusbox span { color: var(--muted); font-size: .88rem; }
+
+    .toolbar {
+      background: rgba(18, 25, 54, .82);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+      margin-bottom: 18px;
+      position: sticky;
+      top: 10px;
+      z-index: 20;
+      backdrop-filter: blur(14px);
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    button, select, input {
+      font: inherit;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+      padding: 10px 14px;
+      outline: none;
+    }
+
+    select option { background: #101735; color: var(--text); }
+
+    input[type="search"] {
+      min-width: min(100%, 360px);
+      border-radius: 14px;
+      flex: 1 1 320px;
+    }
+
+    button {
+      cursor: pointer;
+      transition: transform .15s ease, background .15s ease, border-color .15s ease;
+    }
+
+    button:hover { transform: translateY(-1px); border-color: rgba(255,255,255,.28); }
+    button.primary { background: rgba(157, 183, 255, .18); border-color: rgba(157, 183, 255, .44); }
+    button.ghost { background: rgba(255,255,255,.04); }
+    button.small { padding: 7px 10px; font-size: .85rem; }
+
+    .chip {
+      user-select: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      padding: 8px 11px;
+      background: rgba(255,255,255,.045);
+      color: var(--muted);
+      font-weight: 700;
+      font-size: .82rem;
+      transition: background .15s ease, color .15s ease, border-color .15s ease;
+    }
+
+    .chip.active {
+      background: rgba(157,183,255,.18);
+      border-color: rgba(157,183,255,.52);
+      color: var(--text);
+    }
+
+    .chip .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: .8;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      color: var(--muted);
+      font-size: .9rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 330px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .summary-panel, .feed-panel {
+      background: rgba(18, 25, 54, .70);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .panel-head h2 {
+      font-size: 1rem;
+      margin: 0;
+      letter-spacing: -.01em;
+    }
+
+    .panel-body { padding: 16px; }
+
+    .counts {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .count {
+      background: rgba(255,255,255,.045);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 10px;
+    }
+
+    .count strong {
+      display: block;
+      font-size: 1.25rem;
+      line-height: 1;
+    }
+
+    .count span {
+      display: block;
+      color: var(--muted);
+      font-size: .78rem;
+      margin-top: 5px;
+      font-weight: 700;
+    }
+
+    .note {
+      color: var(--muted);
+      font-size: .88rem;
+      margin: 12px 0 0;
+    }
+
+    .article {
+      border-bottom: 1px solid var(--line);
+      padding: 18px 16px;
+      background: rgba(255,255,255,.018);
+    }
+
+    .article:last-child { border-bottom: 0; }
+
+    .article:hover {
+      background: rgba(255,255,255,.035);
+    }
+
+    .article h3 {
+      margin: 8px 0 10px;
+      line-height: 1.2;
+      font-size: clamp(1.05rem, 2vw, 1.28rem);
+      letter-spacing: -.015em;
+    }
+
+    .original-title {
+      color: var(--muted);
+      font-size: .86rem;
+      margin: -4px 0 10px;
+    }
+
+    .translation-note {
+      color: var(--muted);
+      font-size: .8rem;
+      margin-top: 4px;
+    }
+
+    .article .topline {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      color: var(--muted);
+      font-size: .86rem;
+    }
+
+    .badge {
+      display: inline-flex;
+      border: 1px solid rgba(157,183,255,.42);
+      background: rgba(157,183,255,.12);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: .72rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+    }
+
+    .summary {
+      color: #d9dfff;
+      margin: 10px 0 12px;
+    }
+
+    .why {
+      color: var(--muted);
+      font-size: .9rem;
+      border-left: 3px solid rgba(185,245,216,.45);
+      padding-left: 10px;
+      margin: 10px 0 0;
+    }
+
+    .footer-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .empty, .loading, .error {
+      padding: 24px 16px;
+      color: var(--muted);
+    }
+
+    .error {
+      color: var(--danger);
+    }
+
+    details {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,.035);
+      margin-top: 12px;
+    }
+
+    summary {
+      cursor: pointer;
+      color: var(--accent-2);
+      font-weight: 800;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      color: var(--muted);
+      font-size: .78rem;
+      margin: 10px 0 0;
+    }
+
+    .hidden { display: none !important; }
+
+    .progress-wrap {
+      width: 100%;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.08);
+      overflow: hidden;
+      margin-top: 10px;
+      border: 1px solid var(--line);
+    }
+
+    .progress-bar {
+      width: 0%;
+      height: 100%;
+      background: rgba(185,245,216,.75);
+      transition: width .2s ease;
+    }
+
+    .soft-warning {
+      margin-top: 10px;
+      color: var(--warn);
+      font-size: .86rem;
+    }
+
+    @media (max-width: 900px) {
+      header, .grid { grid-template-columns: 1fr; }
+      .toolbar { position: static; }
+      .statusbox { min-width: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <div class="eyebrow">Svensk OSINT · GDELT liveflöde</div>
+        <h1>Kategoriserat säkerhetsflöde</h1>
+        <p class="lead">
+          Sidan hämtar artiklar direkt från GDELT och sorterar dem mot dina fasta kartkategorier.
+          Rubriker översätts automatiskt till svenska när översättningstjänsten svarar. Sidan använder snabbläge som standard och visar träffar löpande medan GDELT-anropen körs. Sammanfattningen är rubrik- och metadata-baserad. Öppna alltid originalkällan för full verifiering.
+        </p>
+      </div>
+      <div class="statusbox">
+        <strong>Status</strong>
+        <span id="statusText">Redo att hämta flöde.</span>
+        <div class="progress-wrap" aria-hidden="true"><div class="progress-bar" id="progressBar"></div></div>
+        <div class="soft-warning" id="softWarning" style="display:none;"></div>
+      </div>
+    </header>
+
+    <section class="toolbar" aria-label="Filter och hämtning">
+      <div class="controls">
+        <div class="row" id="categoryChips"></div>
+
+        <div class="row">
+          <button class="small ghost" id="selectAll">Välj alla</button>
+          <button class="small ghost" id="clearAll">Avmarkera alla</button>
+          <button class="small primary" id="fetchNow">Hämta live nu</button>
+          <button class="small ghost" id="translateNow">Översätt synliga rubriker</button>
+          <button class="small ghost" id="copyJson">Kopiera synliga poster som kart-JSON</button>
+
+          <label class="chip active" title="Kör ett kärnspår per kategori. Snabbare och stabilare.">
+            <input type="checkbox" id="fastMode" checked />
+            Snabbläge
+          </label>
+
+          <label class="chip" title="Kör även extra svenska och fördjupade frågor. Långsammare men bredare.">
+            <input type="checkbox" id="deepMode" />
+            Fördjupad hämtning
+          </label>
+
+          <select id="timespan" title="Tidsperiod">
+            <option value="6h">Senaste 6 h</option>
+            <option value="12h">Senaste 12 h</option>
+            <option value="24h" selected>Senaste 24 h</option>
+            <option value="48h">Senaste 48 h</option>
+            <option value="72h">Senaste 72 h</option>
+            <option value="7d">Senaste 7 d</option>
+          </select>
+
+          <select id="sortMode" title="Sortering">
+            <option value="date-desc" selected>Nyast först</option>
+            <option value="category">Kategori</option>
+            <option value="source">Källa</option>
+          </select>
+
+          <label class="chip active" title="Hämtar om automatiskt varje timme när sidan är öppen.">
+            <input type="checkbox" id="autoRefresh" checked />
+            Auto varje timme
+          </label>
+
+          <label class="chip active" title="Översätter rubriker till svenska via MyMemorys öppna översättnings-API.">
+            <input type="checkbox" id="autoTranslate" checked />
+            Svenska rubriker
+          </label>
+        </div>
+
+        <div class="row">
+          <input id="searchBox" type="search" placeholder="Sök i rubrik, källa, kategori eller sammanfattning..." />
+          <div class="meta">
+            <span id="lastUpdated">Ej uppdaterad ännu.</span>
+            <span id="visibleCount">0 synliga poster</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <main class="grid">
+      <section class="feed-panel">
+        <div class="panel-head">
+          <h2>Flöde</h2>
+          <span class="meta" id="totalCount">0 hämtade</span>
+        </div>
+        <div id="feed" aria-live="polite">
+          <div class="empty">Klicka på <strong>Hämta live nu</strong> för att läsa in dagens poster.</div>
+        </div>
+      </section>
+
+      <aside class="summary-panel">
+        <div class="panel-head">
+          <h2>Översikt</h2>
+        </div>
+        <div class="panel-body">
+          <div class="counts" id="counts"></div>
+          <p class="note">
+            Snabbläge kör ett kärnspår per kategori och visar träffar löpande. Fördjupad hämtning kör även svenska och extra sökspår, men kan ta längre tid eftersom GDELT ibland tidsgränsar breda frågor.
+          </p>
+
+          <details open>
+            <summary>API-diagnos</summary>
+            <pre id="diagnostics">Ingen hämtning gjord ännu.</pre>
+          </details>
+
+          <details>
+            <summary>Visa GDELT-frågor</summary>
+            <pre id="queryDump"></pre>
+          </details>
+
+          <details>
+            <summary>Så publicerar du på GitHub Pages</summary>
+            <pre>1. Skapa ett nytt GitHub-repo.
+2. Lägg denna fil i roten och döp den till index.html.
+3. Gå till Settings → Pages.
+4. Välj Deploy from branch.
+5. Välj main och /root.
+6. Öppna den publicerade Pages-länken.</pre>
+          </details>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+<script>
+(() => {
+  "use strict";
+
+  const CATEGORIES = [
+    {
+      id: "HYBRID",
+      label: "HYBRID",
+      core: '("hybrid threat" OR "hybrid warfare" OR "foreign interference" OR "information operation" OR disinformation OR sabotage OR "suspected sabotage" OR "critical infrastructure sabotage" OR arson)',
+      extra: [
+        '("rail sabotage" OR "railway sabotage" OR "cable sabotage" OR "telecom sabotage" OR "power grid sabotage" OR "sabotage attack")',
+        '("hybridhot" OR "hybridkrigföring" OR "främmande makt" OR "otillbörlig påverkan" OR desinformation OR informationspåverkan OR sabotageförsök OR "misstänkt sabotage" OR mordbrand OR "kabelsabotage" OR "järnvägssabotage")'
+      ],
+      note: "påverkan, sabotage, desinformation, gråzonsaktivitet och främmande makts försök att påverka"
+    },
+    {
+      id: "NUCLEAR",
+      label: "NUCLEAR",
+      core: '(nuclear OR "nuclear power plant" OR "nuclear facility" OR "nuclear reactor" OR IAEA OR "radiation leak" OR "off-site power" OR "Zaporizhzhia nuclear")',
+      extra: [
+        '(Rosatom OR "nuclear safety" OR "nuclear security" OR "radioactive material" OR "spent nuclear fuel" OR "reactor shutdown")',
+        '("kärnkraftverk" OR kärnteknisk OR kärnreaktor OR strålningsläcka OR radioaktivt OR kärnbränsle OR "kärnteknisk anläggning" OR "extern elförsörjning" OR strålsäkerhet)'
+      ],
+      note: "kärnteknik, kärnkraftverk, strålning, IAEA, elförsörjning och säkerhet vid kärntekniska anläggningar"
+    },
+    {
+      id: "DRONE",
+      label: "DRONE",
+      core: '(drone OR drones OR UAV OR UAS OR "unmanned aerial vehicle" OR "drone attack" OR "drone strike" OR "drone incursion" OR "drone sighting" OR "FPV drone")',
+      extra: [
+        '("airport drone" OR "airspace closed" OR "airspace violation" OR "counter-drone" OR "anti-drone" OR "drone jamming" OR "drone swarm")',
+        '(drönare OR drönarlarm OR drönarattack OR drönarangrepp OR drönarincident OR drönarobservation OR "obemannad luftfarkost" OR "FPV-drönare" OR "antidrönarsystem" OR "drönarstörning")'
+      ],
+      note: "drönare, UAV, drönarattacker, luftrumsintrång, flygplatsstörningar och antidrönaråtgärder"
+    },
+    {
+      id: "INFRA",
+      label: "INFRA",
+      core: '("critical infrastructure" OR railway OR rail OR "power grid" OR telecom OR pipeline OR "undersea cable" OR port OR airport OR refinery OR "energy infrastructure" OR "infrastructure damaged" OR outage)',
+      extra: [
+        '("train disruption" OR "rail disruption" OR "subsea cable" OR "fiber optic cable" OR "telecom cable" OR "internet cable" OR "cable cut" OR "port infrastructure" OR "transport corridor" OR "supply chain")',
+        '("kritisk infrastruktur" OR elnät OR kraftnät OR transformatorstation OR vattenförsörjning OR datacenter OR järnväg OR tågtrafik OR spårtrafik OR "trafikstörning" OR "signalfel" OR kontaktledning)',
+        '(telekom OR mobilnät OR fiberkabel OR kabelbrott OR undervattenskabel OR sjökabel OR "internetavbrott" OR hamn OR flygplats OR bro OR tunnel OR logistik OR leveranskedja OR transportkorridor)',
+        '("arbetslivskriminalitet" OR "myndighetsgemensam kontroll" OR "byggarbetsplats" OR entreprenör OR upphandling OR "infrastrukturprojekt")'
+      ],
+      note: "transport, energi, telekom, vatten, datacenter, bygg- och anläggningsrisker samt störningar i försörjningskedjor"
+    },
+    {
+      id: "MIL",
+      label: "MIL",
+      core: '("missile strike" OR "missile attack" OR "air strike" OR airstrike OR "ballistic missile" OR "cruise missile" OR "military base" OR "military exercise" OR "troop movement" OR "border violation" OR artillery OR warship)',
+      extra: [
+        '("air defence" OR "air defense" OR "air defence system" OR "air defense system" OR "naval exercise" OR "fighter jet" OR "military transport" OR "arms shipment" OR shelling)',
+        '("robotattack" OR robotangrepp OR flyganfall OR luftangrepp OR "ballistisk robot" OR kryssningsrobot OR "militärbas" OR militärövning OR truppförflyttning OR mobilisering OR gränskränkning OR luftförsvar OR luftvärn OR artilleri OR beskjutning OR örlogsfartyg)'
+      ],
+      note: "militära operationer, robotangrepp, luftförsvar, övningar, styrkerörelser och militära transporter"
+    },
+    {
+      id: "INTEL",
+      label: "INTEL",
+      core: '(espionage OR spy OR spying OR intelligence OR "foreign agent" OR "illegal intelligence" OR "state secrets" OR "classified information" OR "satellite data" OR "recruited by intelligence")',
+      extra: [
+        '("FSB agent" OR "GRU agent" OR "MSS" OR "SVR" OR "agent network" OR "covert network" OR "signals intelligence" OR SIGINT OR HUMINT)',
+        '(spioneri OR spionage OR spion OR underrättelseverksamhet OR underrättelsetjänst OR säkerhetstjänst OR "olovlig underrättelseverksamhet" OR "främmande makt" OR statshemligheter OR säkerhetsskydd OR säkerhetsprövning)',
+        '("ryska agenter" OR "kinesiska agenter" OR FSB OR GRU OR SVR OR MSS OR agentnätverk OR målangivare OR satellitdata OR signalspaning OR inhämtning OR värvning OR rekryterad)'
+      ],
+      note: "spionage, olovlig underrättelseverksamhet, agenter, statshemligheter, satellitdata och säkerhetsskydd"
+    },
+    {
+      id: "TERROR",
+      label: "TERROR",
+      core: '(terrorism OR terrorist OR jihadist OR "terror plot" OR "terror attack" OR "Islamic State" OR ISIS OR Daesh OR "lone actor" OR "attack plot" OR extremism)',
+      extra: [
+        '("violent extremism" OR radicalization OR "far-right extremist" OR "right-wing extremist" OR "left-wing extremist" OR accelerationist OR al-Qaeda OR Hamas OR Hezbollah)',
+        '(terrorism OR terrorist OR terrorbrott OR terrorplan OR attentat OR attentatsplanering OR våldsbejakande OR extremism OR extremist OR radikalisering OR jihadist OR ensamagerande OR skolattack OR massdåd OR "Islamiska staten" OR Daesh OR "al-Qaida" OR högerextrem OR vänsterextrem)'
+      ],
+      note: "terrorism, attentatsplanering, våldsbejakande extremism, radikalisering och ideologiskt motiverat våld"
+    },
+    {
+      id: "POLICY",
+      label: "POLICY",
+      core: '(NATO OR EU OR "security policy" OR sanctions OR "defence policy" OR "defense policy" OR "critical infrastructure protection" OR "national security strategy" OR "security agreement")',
+      extra: [
+        '("export controls" OR "host nation support" OR "civil defence" OR "civil defense" OR resilience OR preparedness OR "total defence" OR "foreign interference")',
+        '(Nato OR EU OR säkerhetspolitik OR försvarspolitik OR "nationell säkerhetsstrategi" OR sanktioner OR exportkontroll OR säkerhetsavtal OR försvarsavtal OR värdlandsstöd OR "civilt försvar" OR totalförsvar OR beredskap OR resiliens OR motståndskraft OR kollektivtrafikskydd OR säkerhetsskyddsföreskrifter)'
+      ],
+      note: "säkerhetspolitik, NATO/EU, sanktioner, totalförsvar, skydd av kritisk infrastruktur och regelutveckling"
+    },
+    {
+      id: "LEGAL",
+      label: "LEGAL",
+      core: '(indictment OR charged OR arrested OR convicted OR sentenced OR court OR prosecutor OR prosecution OR trial OR "remanded in custody" OR "security law" OR "espionage charges")',
+      extra: [
+        '("money laundering" OR "organized crime" OR "criminal network" OR "proxy violence" OR "contract killing" OR "public procurement" OR corruption OR bribery OR extradition OR deportation)',
+        '(åtal OR åtalad OR gripen OR anhållen OR häktad OR dömd OR domstol OR åklagare OR rättegång OR utlämning OR utvisning OR säkerhetslag OR spioneriåtal OR säkerhetsskyddslagen OR sanktionsavgift)',
+        '(penningtvätt OR gängkriminell OR "kriminellt nätverk" OR beställningsmord OR proxyvåld OR vapenbrott OR arbetslivskriminalitet OR korruption OR mutbrott OR upphandlingsbrott OR folkbokföringsbrott OR myndighetsinsats)'
+      ],
+      note: "gripanden, åtal, domar, säkerhetslagstiftning, organiserad brottslighet och myndighetsinsatser"
+    },
+    {
+      id: "MAR",
+      label: "MAR",
+      core: '(maritime OR vessel OR tanker OR ship OR port OR "Baltic Sea" OR "Black Sea" OR "undersea cable" OR "shadow fleet" OR "Strait of Hormuz" OR "Red Sea" OR AIS)',
+      extra: [
+        '("cargo ship" OR "container ship" OR "merchant vessel" OR "naval vessel" OR harbour OR harbor OR "port infrastructure" OR "shipping lane" OR "maritime security" OR "dark fleet" OR "AIS spoofing" OR "AIS gap" OR "subsea pipeline")',
+        '(sjöfart OR fartyg OR tankfartyg OR handelsfartyg OR containerfartyg OR örlogsfartyg OR hamn OR Östersjön OR "Svarta havet" OR "Röda havet" OR Hormuzsundet OR Nordsjön OR "Finska viken" OR skuggflotta OR AIS OR undervattenskabel OR sjökabel OR gasledning OR undervattensinfrastruktur)'
+      ],
+      note: "sjöfart, hamnar, fartyg, skuggflottor, AIS-avvikelser, marina hot och undervattensinfrastruktur"
+    },
+    {
+      id: "GPS",
+      label: "GPS",
+      core: '("GPS jamming" OR "GNSS interference" OR spoofing OR "satellite navigation" OR "electronic warfare" OR "navigation signal" OR "GPS spoofing" OR "GNSS spoofing")',
+      extra: [
+        '("GNSS jamming" OR "GPS interference" OR "navigation interference" OR "Baltic Sea" OR "aviation GPS" OR "maritime GPS" OR "aircraft navigation")',
+        '("GPS-störning" OR "GNSS-störning" OR GPS-störningar OR GNSS-störningar OR "störd GPS" OR "störd GNSS" OR signalstörning OR satellitnavigering OR navigationssignal OR "elektronisk krigföring" OR störsändning OR navigationsstörning)'
+      ],
+      note: "GPS/GNSS-störningar, spoofing, elektronisk krigföring och störningar mot luft- eller sjöfart"
+    }
+  ];
+
+  const els = {
+    chips: document.getElementById("categoryChips"),
+    feed: document.getElementById("feed"),
+    statusText: document.getElementById("statusText"),
+    progressBar: document.getElementById("progressBar"),
+    softWarning: document.getElementById("softWarning"),
+    lastUpdated: document.getElementById("lastUpdated"),
+    visibleCount: document.getElementById("visibleCount"),
+    totalCount: document.getElementById("totalCount"),
+    counts: document.getElementById("counts"),
+    diagnostics: document.getElementById("diagnostics"),
+    queryDump: document.getElementById("queryDump"),
+    selectAll: document.getElementById("selectAll"),
+    clearAll: document.getElementById("clearAll"),
+    fetchNow: document.getElementById("fetchNow"),
+    translateNow: document.getElementById("translateNow"),
+    copyJson: document.getElementById("copyJson"),
+    searchBox: document.getElementById("searchBox"),
+    timespan: document.getElementById("timespan"),
+    sortMode: document.getElementById("sortMode"),
+    fastMode: document.getElementById("fastMode"),
+    deepMode: document.getElementById("deepMode"),
+    autoRefresh: document.getElementById("autoRefresh"),
+    autoTranslate: document.getElementById("autoTranslate")
+  };
+
+  let selected = new Set(CATEGORIES.map(c => c.id));
+  let allArticles = [];
+  let lastFetchStarted = null;
+  let autoTimer = null;
+  let isTranslating = false;
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function normalize(value) {
+    return String(value ?? "").toLowerCase();
+  }
+
+  function queriesForCategory(cat) {
+    const out = [];
+    if (cat.core) out.push(cat.core);
+    if (els.deepMode?.checked && Array.isArray(cat.extra)) out.push(...cat.extra);
+    if (!out.length && Array.isArray(cat.queries)) out.push(...cat.queries);
+    if (!out.length && Array.isArray(cat.terms)) out.push("(" + cat.terms.join(" OR ") + ")");
+    return out;
+  }
+
+  function queryForCategory(cat) {
+    return queriesForCategory(cat).join("\n");
+  }
+
+  function gdeltUrl(query) {
+    const params = new URLSearchParams({
+      query,
+      mode: "artlist",
+      format: "json",
+      sort: "datedesc",
+      maxrecords: els.fastMode?.checked ? "30" : "40",
+      timespan: els.timespan.value
+    });
+    return "https://api.gdeltproject.org/api/v2/doc/doc?" + params.toString();
+  }
+
+  function renderChips() {
+    els.chips.innerHTML = CATEGORIES.map(cat => `
+      <button class="chip ${selected.has(cat.id) ? "active" : ""}" data-cat="${cat.id}" title="${escapeHtml(cat.note)}">
+        <span class="dot"></span>${cat.label}
+      </button>
+    `).join("");
+
+    els.chips.querySelectorAll("[data-cat]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.cat;
+        if (selected.has(id)) selected.delete(id);
+        else selected.add(id);
+        renderChips();
+        renderFeed();
+      });
+    });
+  }
+
+  function renderQueries() {
+    els.queryDump.textContent = CATEGORIES.map(cat => {
+      const extra = (cat.extra || []).map((q, i) => `  Extra ${i + 1}: ${q}`).join("\n");
+      return `${cat.id}:\n  Kärna: ${cat.core || ""}${extra ? "\n" + extra : ""}\n`;
+    }).join("\n");
+  }
+
+  function parseDate(article) {
+    const d = article.seendate || article.date || article.datetime || "";
+    if (!d) return null;
+    const cleaned = String(d).replace(/^(\d{4})(\d{2})(\d{2})T?(\d{2})(\d{2})(\d{2})Z?$/, "$1-$2-$3T$4:$5:$6Z");
+    const dt = new Date(cleaned);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+
+  function formatDate(article) {
+    const dt = parseDate(article);
+    if (!dt) return "okänd tid";
+    return new Intl.DateTimeFormat("sv-SE", {
+      dateStyle: "medium",
+      timeStyle: "short"
+    }).format(dt);
+  }
+
+  function hostFromUrl(url) {
+    try { return new URL(url).hostname.replace(/^www\./, ""); }
+    catch { return ""; }
+  }
+
+  function getSource(article) {
+    return article.domain || article.source || hostFromUrl(article.url) || "okänd källa";
+  }
+
+  const LANG_MAP = {
+    "english": "en", "en": "en", "eng": "en",
+    "swedish": "sv", "sv": "sv", "swe": "sv",
+    "german": "de", "de": "de", "deu": "de",
+    "french": "fr", "fr": "fr", "fra": "fr",
+    "spanish": "es", "es": "es", "spa": "es",
+    "italian": "it", "it": "it", "ita": "it",
+    "portuguese": "pt", "pt": "pt", "por": "pt",
+    "dutch": "nl", "nl": "nl", "nld": "nl",
+    "danish": "da", "da": "da", "dan": "da",
+    "norwegian": "no", "no": "no", "nor": "no",
+    "finnish": "fi", "fi": "fi", "fin": "fi",
+    "polish": "pl", "pl": "pl", "pol": "pl",
+    "russian": "ru", "ru": "ru", "rus": "ru",
+    "ukrainian": "uk", "uk": "uk", "ukr": "uk",
+    "arabic": "ar", "ar": "ar", "ara": "ar",
+    "hebrew": "he", "he": "he", "iw": "he",
+    "turkish": "tr", "tr": "tr", "tur": "tr",
+    "chinese": "zh", "zh": "zh", "zho": "zh",
+    "japanese": "ja", "ja": "ja", "jpn": "ja",
+    "korean": "ko", "ko": "ko", "kor": "ko",
+    "hindi": "hi", "hi": "hi", "hin": "hi"
+  };
+
+  function getLangCode(article) {
+    const raw = normalize(article.language || article.raw?.language || "");
+    if (!raw) return "en";
+    return LANG_MAP[raw] || LANG_MAP[raw.split("-")[0]] || "en";
+  }
+
+  function byteTrim(value, maxBytes) {
+    const encoder = new TextEncoder();
+    let out = String(value || "");
+    while (encoder.encode(out).length > maxBytes && out.length > 0) {
+      out = out.slice(0, -1);
+    }
+    return out;
+  }
+
+  function getDisplayTitle(article) {
+    return article.titleSv || article.title || "Artikel utan rubrik";
+  }
+
+  function translationCacheKey(sourceLang, title) {
+    return "sv-title-v1:" + sourceLang + ":" + title;
+  }
+
+  function getCachedTranslation(sourceLang, title) {
+    try {
+      return localStorage.getItem(translationCacheKey(sourceLang, title));
+    } catch {
+      return null;
+    }
+  }
+
+  function setCachedTranslation(sourceLang, title, translated) {
+    try {
+      localStorage.setItem(translationCacheKey(sourceLang, title), translated);
+    } catch {
+      // Cache kan vara blockerad i vissa webbläsare. Sidan fungerar ändå.
+    }
+  }
+
+  function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  async function translateTextToSwedish(text, sourceLang) {
+    const clean = byteTrim(text, 480);
+    const params = new URLSearchParams({
+      q: clean,
+      langpair: `${sourceLang}|sv`,
+      mt: "1"
+    });
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    try {
+      const res = await fetch("https://api.mymemory.translated.net/get?" + params.toString(), {
+        signal: controller.signal
+      });
+      if (!res.ok) throw new Error(`översättning ${res.status}`);
+      const data = await res.json();
+      const translated = data?.responseData?.translatedText;
+      if (!translated || normalize(translated) === normalize(clean)) return null;
+      return translated;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async function translateArticleTitle(article) {
+    const original = article.title || "";
+    if (!original || article.titleSv || article.translationTried) return;
+
+    const sourceLang = getLangCode(article);
+
+    if (sourceLang === "sv") {
+      article.titleSv = original;
+      article.translationSource = "Originalspråk svenska";
+      article.translationTried = true;
+      return;
+    }
+
+    const cached = getCachedTranslation(sourceLang, original);
+    if (cached) {
+      article.titleSv = cached;
+      article.translationSource = "Översatt till svenska, hämtad från webbläsarens cache";
+      article.translationTried = true;
+      article.summary = buildSummary(article);
+      return;
+    }
+
+    try {
+      const translated = await translateTextToSwedish(original, sourceLang);
+      if (translated) {
+        article.titleSv = translated;
+        article.translationSource = `Maskinöversatt från ${sourceLang} till svenska`;
+        setCachedTranslation(sourceLang, original, translated);
+      } else {
+        article.translationSource = "Ingen svensk översättning returnerades";
+      }
+    } catch (err) {
+      article.translationSource = "Översättning misslyckades eller blockerades";
+      console.warn("Översättningsfel:", err);
+    } finally {
+      article.translationTried = true;
+      article.summary = buildSummary(article);
+    }
+  }
+
+  async function translateVisibleTitles(force = false) {
+    if (isTranslating) return;
+    const items = visibleArticles()
+      .filter(article => force || (!article.titleSv && !article.translationTried))
+      .slice(0, 50);
+
+    if (!items.length) return;
+
+    isTranslating = true;
+    els.statusText.textContent = `Översätter ${items.length} synliga rubriker till svenska...`;
+
+    for (const article of items) {
+      await translateArticleTitle(article);
+      await delay(130);
+    }
+
+    isTranslating = false;
+    els.statusText.textContent = `Översättning klar för ${items.length} rubriker.`;
+    renderFeed();
+  }
+
+  function categoryReasons(categories) {
+    return categories.map(id => {
+      const cat = CATEGORIES.find(c => c.id === id);
+      return `${id}: ${cat ? cat.note : "kategori träffad"}`;
+    }).join("; ");
+  }
+
+  function buildSummary(article) {
+    const title = getDisplayTitle(article);
+    const source = getSource(article);
+    const cats = article.categories.join(", ");
+    const original = article.titleSv && article.titleSv !== article.title ? ` Originalrubrik: ”${article.title}”.` : "";
+    return `Bekräftat i flödet: GDELT har indexerat en artikel från ${source} med rubriken ”${title}”.${original} Analytisk markering: posten matchar ${cats}. Sammanfattningen bygger på rubrik och metadata, inte fulltext.`;
+  }
+
+  function keywordHits(article, cats) {
+    const hay = normalize([article.title, article.titleSv, article.domain, article.url, article.sourcecountry, article.language].join(" "));
+    const hits = [];
+    for (const id of cats) {
+      const cat = CATEGORIES.find(c => c.id === id);
+      if (!cat) continue;
+      const blocks = [cat.core, ...(cat.extra || []), ...(cat.queries || [])].filter(Boolean);
+      const pool = blocks.flatMap(q => q
+        .replace(/[()]/g, " ")
+        .replace(/\s+AND\s+/gi, " OR ")
+        .split(/\s+OR\s+/i)
+        .map(x => x.trim())
+        .filter(Boolean)
+      );
+      const matched = pool
+        .map(t => t.replaceAll('"', "").replaceAll("'", "").trim())
+        .filter(t => t.length > 2)
+        .find(t => hay.includes(normalize(t)));
+      if (matched) hits.push(`${id} via ”${matched}”`);
+    }
+    return hits;
+  }
+
+  function dedupeAndShape(results) {
+    const map = new Map();
+
+    for (const item of results) {
+      const article = item.article || item;
+      const catId = item.category;
+      const key = article.url || normalize(article.title);
+      if (!key) continue;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          title: article.title || "Artikel utan rubrik",
+          url: article.url || "",
+          domain: article.domain || hostFromUrl(article.url),
+          sourcecountry: article.sourcecountry || article.sourceCountry || "",
+          language: article.language || "",
+          seendate: article.seendate || article.date || article.datetime || "",
+          categories: [],
+          raw: article
+        });
+      }
+
+      const existing = map.get(key);
+      if (!existing.categories.includes(catId)) existing.categories.push(catId);
+    }
+
+    return Array.from(map.values()).map(a => ({
+      ...a,
+      summary: buildSummary(a),
+      hits: keywordHits(a, a.categories)
+    }));
+  }
+
+  function appendDiagnostic(line, cssClass = "") {
+    if (!els.diagnostics) return;
+    const stamp = new Intl.DateTimeFormat("sv-SE", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date());
+    const row = `[${stamp}] ${line}`;
+    els.diagnostics.textContent = els.diagnostics.textContent === "Ingen hämtning gjord ännu."
+      ? row
+      : els.diagnostics.textContent + "\n" + row;
+    els.diagnostics.scrollTop = els.diagnostics.scrollHeight;
+  }
+
+  function updateProgress(progress) {
+    if (!els.progressBar) return;
+    const pct = progress.total ? Math.round((progress.current / progress.total) * 100) : 0;
+    els.progressBar.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  }
+
+  async function fetchGdeltQuery(cat, query, queryIndex) {
+    const url = gdeltUrl(query);
+    const controller = new AbortController();
+    const timeoutMs = els.fastMode?.checked ? 15000 : 22000;
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      if (!res.ok) throw new Error(`${cat.id} fråga ${queryIndex + 1}: GDELT svarade ${res.status}`);
+      const data = await res.json();
+      const articles = Array.isArray(data.articles) ? data.articles : [];
+      appendDiagnostic(`${cat.id} fråga ${queryIndex + 1}: ${articles.length} träffar`);
+      return articles.map(article => ({ category: cat.id, article, queryIndex }));
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async function fetchCategory(cat, progress, resultBuffer) {
+    const queries = queriesForCategory(cat);
+
+    for (let index = 0; index < queries.length; index++) {
+      progress.current += 1;
+      updateProgress(progress);
+      els.statusText.textContent = `Hämtar GDELT ${progress.current}/${progress.total}: ${cat.id} fråga ${index + 1}/${queries.length}`;
+
+      try {
+        const rows = await fetchGdeltQuery(cat, queries[index], index);
+        resultBuffer.push(...rows);
+        allArticles = dedupeAndShape(resultBuffer);
+        renderFeed(false);
+      } catch (err) {
+        const message = err?.name === "AbortError"
+          ? `${cat.id} fråga ${index + 1}: timeout, går vidare`
+          : (err?.message || `${cat.id} fråga ${index + 1}: okänt fel`);
+        appendDiagnostic(message);
+        console.warn("GDELT-fel:", message);
+      }
+
+      await delay(120);
+    }
+  }
+
+  async function fetchAll() {
+    lastFetchStarted = new Date();
+    allArticles = [];
+    renderLoading();
+
+    if (els.progressBar) els.progressBar.style.width = "0%";
+    if (els.softWarning) {
+      els.softWarning.style.display = "none";
+      els.softWarning.textContent = "";
+    }
+
+    const cats = CATEGORIES.filter(c => selected.has(c.id));
+    if (!cats.length) {
+      els.statusText.textContent = "Inga kategorier valda.";
+      renderFeed(false);
+      return;
+    }
+
+    if (els.diagnostics) els.diagnostics.textContent = "Startar hämtning...";
+    const totalQueries = cats.reduce((sum, cat) => sum + queriesForCategory(cat).length, 0);
+    const progress = { current: 0, total: totalQueries };
+    const resultBuffer = [];
+
+    if (els.deepMode?.checked && els.softWarning) {
+      els.softWarning.style.display = "block";
+      els.softWarning.textContent = "Fördjupad hämtning är på. Det kan ta flera minuter och vissa GDELT-frågor kan tidsgränsas.";
+    }
+
+    els.statusText.textContent = `Hämtar ${cats.length} kategorier från GDELT med ${totalQueries} sökfrågor...`;
+
+    for (const cat of cats) {
+      await fetchCategory(cat, progress, resultBuffer);
+    }
+
+    allArticles = dedupeAndShape(resultBuffer);
+    updateProgress({ current: totalQueries, total: totalQueries });
+
+    els.statusText.textContent = `Hämtning klar. ${allArticles.length} unika poster hittade.`;
+    els.lastUpdated.textContent = `Senast uppdaterad: ${new Intl.DateTimeFormat("sv-SE", {
+      dateStyle: "medium",
+      timeStyle: "short"
+    }).format(new Date())}`;
+
+    renderFeed();
+  }
+
+  function renderLoading() {
+    els.feed.innerHTML = `<div class="loading">Hämtar artiklar från GDELT...</div>`;
+  }
+
+  function visibleArticles() {
+    const q = normalize(els.searchBox.value);
+    let items = allArticles.filter(article => article.categories.some(c => selected.has(c)));
+
+    if (q) {
+      items = items.filter(article => normalize([
+        article.title,
+        article.titleSv,
+        article.domain,
+        article.sourcecountry,
+        article.language,
+        article.categories.join(" "),
+        article.summary
+      ].join(" ")).includes(q));
+    }
+
+    const mode = els.sortMode.value;
+    items.sort((a, b) => {
+      if (mode === "category") return a.categories[0].localeCompare(b.categories[0]) || (parseDate(b)?.getTime() || 0) - (parseDate(a)?.getTime() || 0);
+      if (mode === "source") return getSource(a).localeCompare(getSource(b)) || (parseDate(b)?.getTime() || 0) - (parseDate(a)?.getTime() || 0);
+      return (parseDate(b)?.getTime() || 0) - (parseDate(a)?.getTime() || 0);
+    });
+
+    return items;
+  }
+
+  function renderCounts(items) {
+    const counts = Object.fromEntries(CATEGORIES.map(c => [c.id, 0]));
+    for (const article of allArticles) {
+      for (const cat of article.categories) counts[cat] = (counts[cat] || 0) + 1;
+    }
+
+    els.counts.innerHTML = CATEGORIES.map(cat => `
+      <div class="count">
+        <strong>${counts[cat.id] || 0}</strong>
+        <span>${cat.id}</span>
+      </div>
+    `).join("");
+
+    els.totalCount.textContent = `${allArticles.length} hämtade`;
+    els.visibleCount.textContent = `${items.length} synliga poster`;
+  }
+
+  function renderFeed(triggerTranslation = true) {
+    const items = visibleArticles();
+    renderCounts(items);
+
+    if (!allArticles.length) {
+      els.feed.innerHTML = `<div class="empty">Inga poster hämtade ännu. Klicka på <strong>Hämta live nu</strong>.</div>`;
+      return;
+    }
+
+    if (!items.length) {
+      els.feed.innerHTML = `<div class="empty">Inga poster matchar valda filter.</div>`;
+      return;
+    }
+
+    els.feed.innerHTML = items.map(article => {
+      const source = getSource(article);
+      const badges = article.categories.map(c => `<span class="badge">${escapeHtml(c)}</span>`).join("");
+      const hits = article.hits.length ? article.hits.join(", ") : categoryReasons(article.categories);
+      return `
+        <article class="article">
+          <div class="topline">
+            ${badges}
+            <span>${escapeHtml(formatDate(article))}</span>
+            <span>·</span>
+            <span>${escapeHtml(source)}</span>
+            ${article.sourcecountry ? `<span>· ${escapeHtml(article.sourcecountry)}</span>` : ""}
+            ${article.language ? `<span>· ${escapeHtml(article.language)}</span>` : ""}
+          </div>
+          <h3>${article.url ? `<a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(getDisplayTitle(article))}</a>` : escapeHtml(getDisplayTitle(article))}</h3>
+          ${article.titleSv && article.titleSv !== article.title ? `<div class="original-title">Originalrubrik: ${escapeHtml(article.title)}</div>` : ""}
+          ${article.translationSource ? `<div class="translation-note">${escapeHtml(article.translationSource)}</div>` : ""}
+          <p class="summary">${escapeHtml(article.summary)}</p>
+          <p class="why"><strong>Varför relevant:</strong> ${escapeHtml(hits)}</p>
+          <div class="footer-actions">
+            ${article.url ? `<a class="chip active" href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Öppna artikel</a>` : ""}
+            <button class="small ghost" data-copy-one="${escapeHtml(article.url || article.title)}">Kopiera post</button>
+          </div>
+        </article>
+      `;
+    }).join("");
+
+    els.feed.querySelectorAll("[data-copy-one]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const key = btn.dataset.copyOne;
+        const article = allArticles.find(a => (a.url || a.title) === key);
+        if (article) copyText(JSON.stringify(toMapDraft(article), null, 2), "Post kopierad.");
+      });
+    });
+
+    if (triggerTranslation && els.autoTranslate.checked) {
+      translateVisibleTitles(false);
+    }
+  }
+
+  function toMapDraft(article) {
+    return {
+      country: article.sourcecountry || "",
+      cat: article.categories[0] || "",
+      title: getDisplayTitle(article) || "",
+      place: "",
+      date: parseDate(article)?.toISOString().slice(0, 10) || "",
+      lat: null,
+      lng: null,
+      summary: article.summary || "",
+      url: article.url || ""
+    };
+  }
+
+  async function copyText(text, okMessage) {
+    try {
+      await navigator.clipboard.writeText(text);
+      els.statusText.textContent = okMessage;
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+      els.statusText.textContent = okMessage;
+    }
+  }
+
+  function copyVisibleAsJson() {
+    const data = visibleArticles().map(toMapDraft);
+    copyText(JSON.stringify(data, null, 2), `${data.length} synliga poster kopierade som kart-JSON.`);
+  }
+
+  function setupAutoRefresh() {
+    if (autoTimer) clearInterval(autoTimer);
+    if (els.autoRefresh.checked) {
+      autoTimer = setInterval(() => {
+        if (document.visibilityState === "visible") fetchAll();
+      }, 60 * 60 * 1000);
+    }
+  }
+
+  els.selectAll.addEventListener("click", () => {
+    selected = new Set(CATEGORIES.map(c => c.id));
+    renderChips();
+    renderFeed();
+  });
+
+  els.clearAll.addEventListener("click", () => {
+    selected.clear();
+    renderChips();
+    renderFeed();
+  });
+
+  els.fetchNow.addEventListener("click", fetchAll);
+  els.translateNow.addEventListener("click", () => translateVisibleTitles(true));
+  els.copyJson.addEventListener("click", copyVisibleAsJson);
+  els.searchBox.addEventListener("input", renderFeed);
+  els.sortMode.addEventListener("change", renderFeed);
+  els.timespan.addEventListener("change", fetchAll);
+  els.fastMode.addEventListener("change", fetchAll);
+  els.deepMode.addEventListener("change", fetchAll);
+  els.autoRefresh.addEventListener("change", setupAutoRefresh);
+  els.autoTranslate.addEventListener("change", () => {
+    if (els.autoTranslate.checked) translateVisibleTitles(false);
+    renderFeed();
+  });
+
+  renderChips();
+  renderQueries();
+  renderCounts([]);
+  setupAutoRefresh();
+
+  // Hämta automatiskt när sidan öppnas.
+  fetchAll();
+})();
+</script>
+</body>
+</html>
