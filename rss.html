@@ -28,7 +28,8 @@
     .eyebrow{color:var(--accent-2);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:.78rem;margin-bottom:8px;}
     h1{margin:0;font-size:clamp(2rem,5vw,4rem);letter-spacing:-.055em;line-height:.95;}
     .lead{max-width:780px;color:var(--muted);margin:16px 0 0;font-size:1rem;}
-    .statusbox{background:rgba(18,25,54,.72);border:1px solid var(--line);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);min-width:260px;}
+    .statusbox{background:rgba(18,25,54,.72);border:1px solid var(--line);border-radius:var(--radius);
+      padding:16px;box-shadow:var(--shadow);min-width:260px;}
     .statusbox strong{display:block;font-size:.9rem;margin-bottom:4px;}
     .statusbox span{color:var(--muted);font-size:.88rem;}
     .toolbar{background:rgba(18,25,54,.82);border:1px solid var(--line);border-radius:var(--radius);
@@ -42,7 +43,8 @@
     button{cursor:pointer;transition:transform .15s,background .15s,border-color .15s;}
     button:hover{transform:translateY(-1px);border-color:rgba(255,255,255,.28);}
     button.primary{background:rgba(157,183,255,.18);border-color:rgba(157,183,255,.44);}
-    button.ghost{background:rgba(255,255,255,.04);}button.small{padding:7px 10px;font-size:.85rem;}
+    button.ghost{background:rgba(255,255,255,.04);}
+    button.small{padding:7px 10px;font-size:.85rem;}
     .chip{user-select:none;cursor:pointer;display:inline-flex;align-items:center;gap:8px;
       border-radius:999px;border:1px solid var(--line);padding:8px 11px;
       background:rgba(255,255,255,.045);color:var(--muted);font-weight:700;font-size:.82rem;
@@ -57,7 +59,8 @@
       justify-content:space-between;align-items:center;gap:12px;}
     .panel-head h2{font-size:1rem;margin:0;}
     .panel-body{padding:16px;}
-    .counts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+    .counts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;
+      max-height:520px;overflow-y:auto;}
     .count{background:rgba(255,255,255,.045);border:1px solid var(--line);border-radius:14px;padding:10px;}
     .count strong{display:block;font-size:1.25rem;line-height:1;}
     .count span{display:block;color:var(--muted);font-size:.78rem;margin-top:5px;font-weight:700;}
@@ -70,6 +73,7 @@
     .article .topline{display:flex;flex-wrap:wrap;gap:8px;align-items:center;color:var(--muted);font-size:.86rem;}
     .badge{display:inline-flex;border:1px solid rgba(157,183,255,.42);background:rgba(157,183,255,.12);
       color:var(--text);border-radius:999px;padding:4px 8px;font-size:.72rem;font-weight:800;letter-spacing:.04em;}
+    .badge.gn{border-color:rgba(255,180,100,.42);background:rgba(255,180,100,.12);color:#ffe0a3;}
     .source-badge{display:inline-flex;border:1px solid rgba(185,245,216,.35);background:rgba(185,245,216,.08);
       color:var(--accent-2);border-radius:999px;padding:3px 8px;font-size:.72rem;font-weight:700;}
     .summary{color:#d9dfff;margin:8px 0 10px;font-size:.95rem;}
@@ -96,7 +100,7 @@
     <div>
       <div class="eyebrow">Svensk OSINT · Europa RSS-flöde</div>
       <h1>Sökbart RSS-flöde</h1>
-      <p class="lead">Hämtar artiklar från europeiska säkerhets-, underrättelse- och nyhetsflöden. Filtrera på kategori, sök i rubriker och sammanfattningar. Klicka alltid igenom till originalkällan för verifiering.</p>
+      <p class="lead">Hämtar artiklar från europeiska nyhetskällor samt tematiska Google News-flöden som speglar GDELT-flikens kategorier. Orangea etiketter = Google News-teman. Blå = direkta RSS-källflöden.</p>
     </div>
     <div class="statusbox">
       <strong>Status</strong>
@@ -117,7 +121,9 @@
           <option value="source">Källa A–Ö</option>
           <option value="category">Kategori</option>
         </select>
-        <label class="chip active"><input type="checkbox" id="autoRefresh" checked /> Auto varje timme</label>
+        <label class="chip active">
+          <input type="checkbox" id="autoRefresh" checked /> Auto varje timme
+        </label>
       </div>
       <div class="row">
         <input id="searchBox" type="search" placeholder="Sök i rubrik, källa, kategori eller sammanfattning..." />
@@ -143,7 +149,10 @@
       <div class="panel-head"><h2>Översikt</h2></div>
       <div class="panel-body">
         <div class="counts" id="counts"></div>
-        <p class="note">Hämtar via tre CORS-proxyer i tur och ordning. Källor som inte svarar hoppas över.</p>
+        <p class="note">
+          Totalt <span id="sourceCountNote"></span> källflöden.<br>
+          Hämtar via CORS-proxyer med fallback. Se loggen för detaljer.
+        </p>
         <details open><summary>Hämtningslogg</summary><pre id="diagnostics">Ingen hämtning gjord ännu.</pre></details>
       </div>
     </aside>
@@ -154,57 +163,155 @@
 (() => {
 "use strict";
 
-// Tre proxyer som provas i tur och ordning per källa.
-// corsproxy.io är snabbast men kan ha rate-limits.
-// allorigins.win är backup. thingproxy är sista utväg.
 const PROXIES = [
   url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
   url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
   url => `https://thingproxy.freeboard.io/fetch/${url}`,
 ];
 
+// Google News RSS-hjälpfunktion
+const GN = q => `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`;
+
 const SOURCES = [
-  // Ukraina/Ryssland
-  { id:"Moscow Times",       cat:"Ukraina/Ryssland", url:"https://www.themoscowtimes.com/rss/news" },
-  { id:"Meduza",             cat:"Ukraina/Ryssland", url:"https://meduza.io/rss/all" },
-  { id:"Euromaidan Press",   cat:"Ukraina/Ryssland", url:"https://euromaidanpress.com/feed/" },
-  { id:"The Russian Reader", cat:"Ukraina/Ryssland", url:"https://therussianreader.com/feed/" },
-  { id:"Barents Observer",   cat:"Ukraina/Ryssland", url:"https://thebarentsobserver.com/feed" },
-  { id:"BNE Intellinews",    cat:"Ukraina/Ryssland", url:"https://www.intellinews.com/rss/" },
-  { id:"InformNapalm",       cat:"Ukraina/Ryssland", url:"https://informnapalm.org/en/feed/" },
-  { id:"Kyiv Post",          cat:"Ukraina/Ryssland", url:"https://www.kyivpost.com/rss" },
-  { id:"UA Wire",            cat:"Ukraina/Ryssland", url:"https://www.uawire.org/feed" },
-  { id:"RFE/RL",             cat:"Ukraina/Ryssland", url:"https://www.rferl.org/api/z_mg-vog_eiykqn" },
-  { id:"TV Rain",            cat:"Ukraina/Ryssland", url:"https://tvrain.tv/rss/" },
-  // Arktis/Norden
-  { id:"Eye on the Arctic",  cat:"Arktis/Norden",    url:"https://www.rcinet.ca/eye-on-the-arctic/feed/" },
-  { id:"Arctic Today",       cat:"Arktis/Norden",    url:"https://www.arctictoday.com/feed/" },
-  { id:"High North News",    cat:"Arktis/Norden",    url:"https://www.highnorthnews.com/en/rss.xml" },
-  { id:"Up North Magazine",  cat:"Arktis/Norden",    url:"https://upnorth.eu/feed/" },
-  // EU-institutioner
-  { id:"BBC Europe",         cat:"EU-institutioner", url:"https://feeds.bbci.co.uk/news/world/europe/rss.xml" },
-  { id:"Europol",            cat:"EU-institutioner", url:"https://www.europol.europa.eu/rss.xml" },
-  { id:"EU Observer",        cat:"EU-institutioner", url:"https://euobserver.com/rss" },
-  { id:"Euractiv",           cat:"EU-institutioner", url:"https://www.euractiv.com/feed/" },
-  { id:"ECFR",               cat:"EU-institutioner", url:"https://ecfr.eu/feed/" },
-  { id:"EU ISS",             cat:"EU-institutioner", url:"https://www.iss.europa.eu/rss.xml" },
-  { id:"OSCE",               cat:"EU-institutioner", url:"https://www.osce.org/news/rss" },
-  { id:"Euranet Plus",       cat:"EU-institutioner", url:"https://euranetplus-inside.eu/feed/" },
-  { id:"Eurojust",           cat:"EU-institutioner", url:"https://www.eurojust.europa.eu/rss.xml" },
-  // Säkerhet/Försvar
-  { id:"Bulgarian Military", cat:"Säkerhet/Försvar", url:"https://bulgarianmilitary.com/feed/" },
-  { id:"UK Defence Journal", cat:"Säkerhet/Försvar", url:"https://ukdefencejournal.org.uk/feed/" },
-  { id:"Statewatch",         cat:"Säkerhet/Försvar", url:"https://www.statewatch.org/news/rss/" },
-  { id:"Vox Pol",            cat:"Säkerhet/Försvar", url:"https://www.voxpol.eu/feed/" },
-  // Balkan/Östeuropa
-  { id:"Balkan Insight",     cat:"Balkan/Östeuropa", url:"https://balkaninsight.com/feed/" },
-  { id:"Civil.ge",           cat:"Balkan/Östeuropa", url:"https://civil.ge/feed" },
-  { id:"Emerging Europe",    cat:"Balkan/Östeuropa", url:"https://emerging-europe.com/feed/" },
-  { id:"Caucasian Journal",  cat:"Balkan/Östeuropa", url:"https://english.caucasianjournal.org/feeds/posts/default?alt=rss" },
-  { id:"BNN Latvia",         cat:"Balkan/Östeuropa", url:"https://bnn-news.com/feed" },
-  // Journalistik
-  { id:"EJO",                cat:"Journalistik",     url:"https://en.ejo.ch/feed" },
-  { id:"Sifted",             cat:"Journalistik",     url:"https://sifted.eu/rss" },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // DIREKTA RSS-KÄLLFLÖDEN
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── Ukraina/Ryssland ──────────────────────────────────────────────────────
+  { id:"Moscow Times",        cat:"Ukraina/Ryssland", url:"https://www.themoscowtimes.com/rss/news" },
+  { id:"Meduza",              cat:"Ukraina/Ryssland", url:"https://meduza.io/rss/all" },
+  { id:"Kyiv Independent",    cat:"Ukraina/Ryssland", url:"https://kyivindependent.com/feed/" },
+  { id:"Kyiv Post",           cat:"Ukraina/Ryssland", url:"https://www.kyivpost.com/rss" },
+  { id:"UA Wire",             cat:"Ukraina/Ryssland", url:"https://www.uawire.org/feed" },
+  { id:"Euromaidan Press",    cat:"Ukraina/Ryssland", url:"https://euromaidanpress.com/feed/" },
+  { id:"RFE/RL",              cat:"Ukraina/Ryssland", url:"https://www.rferl.org/api/z_mg-vog_eiykqn" },
+  { id:"The Russian Reader",  cat:"Ukraina/Ryssland", url:"https://therussianreader.com/feed/" },
+  { id:"InformNapalm",        cat:"Ukraina/Ryssland", url:"https://informnapalm.org/en/feed/" },
+  { id:"Novaya Gazeta",       cat:"Ukraina/Ryssland", url:"https://novayagazeta.ru/rss/all.xml" },
+  { id:"The Bell",            cat:"Ukraina/Ryssland", url:"https://en.thebell.io/feed/" },
+  { id:"RIDDLE Russia",       cat:"Ukraina/Ryssland", url:"https://ridl.io/feed/" },
+  { id:"Russia Matters",      cat:"Ukraina/Ryssland", url:"https://russiamatters.org/rss.xml" },
+  { id:"TV Rain",             cat:"Ukraina/Ryssland", url:"https://tvrain.tv/rss/" },
+  { id:"Barents Observer",    cat:"Ukraina/Ryssland", url:"https://thebarentsobserver.com/feed" },
+  { id:"BNE Intellinews",     cat:"Ukraina/Ryssland", url:"https://www.intellinews.com/rss/" },
+  { id:"Belsat (Belarus)",    cat:"Ukraina/Ryssland", url:"https://belsat.eu/en/feed/" },
+  { id:"ERR Estonia",         cat:"Ukraina/Ryssland", url:"https://news.err.ee/rss" },
+
+  // ── Arktis/Norden ─────────────────────────────────────────────────────────
+  { id:"Eye on the Arctic",   cat:"Arktis/Norden",    url:"https://www.rcinet.ca/eye-on-the-arctic/feed/" },
+  { id:"Arctic Today",        cat:"Arktis/Norden",    url:"https://www.arctictoday.com/feed/" },
+  { id:"High North News",     cat:"Arktis/Norden",    url:"https://www.highnorthnews.com/en/rss.xml" },
+  { id:"Up North Magazine",   cat:"Arktis/Norden",    url:"https://upnorth.eu/feed/" },
+
+  // ── EU-institutioner ──────────────────────────────────────────────────────
+  { id:"BBC Europe",          cat:"EU-institutioner", url:"https://feeds.bbci.co.uk/news/world/europe/rss.xml" },
+  { id:"Europol",             cat:"EU-institutioner", url:"https://www.europol.europa.eu/rss.xml" },
+  { id:"Eurojust",            cat:"EU-institutioner", url:"https://www.eurojust.europa.eu/rss.xml" },
+  { id:"EU Observer",         cat:"EU-institutioner", url:"https://euobserver.com/rss" },
+  { id:"Euractiv",            cat:"EU-institutioner", url:"https://www.euractiv.com/feed/" },
+  { id:"ECFR",                cat:"EU-institutioner", url:"https://ecfr.eu/feed/" },
+  { id:"EU ISS",              cat:"EU-institutioner", url:"https://www.iss.europa.eu/rss.xml" },
+  { id:"OSCE",                cat:"EU-institutioner", url:"https://www.osce.org/news/rss" },
+  { id:"Euranet Plus",        cat:"EU-institutioner", url:"https://euranetplus-inside.eu/feed/" },
+  { id:"EUvsDisinfo",         cat:"EU-institutioner", url:"https://euvsdisinfo.eu/feed/" },
+  { id:"Follow the Money",    cat:"EU-institutioner", url:"https://www.ftm.eu/rss" },
+  { id:"Investigate Europe",  cat:"EU-institutioner", url:"https://www.investigate-europe.eu/en/feed/" },
+
+  // ── Säkerhet/Försvar ──────────────────────────────────────────────────────
+  { id:"Bulgarian Military",  cat:"Säkerhet/Försvar", url:"https://bulgarianmilitary.com/feed/" },
+  { id:"UK Defence Journal",  cat:"Säkerhet/Försvar", url:"https://ukdefencejournal.org.uk/feed/" },
+  { id:"Statewatch",          cat:"Säkerhet/Försvar", url:"https://www.statewatch.org/news/rss/" },
+  { id:"Vox Pol",             cat:"Säkerhet/Försvar", url:"https://www.voxpol.eu/feed/" },
+  { id:"CEPA",                cat:"Säkerhet/Försvar", url:"https://cepa.org/feed/" },
+  { id:"War on the Rocks",    cat:"Säkerhet/Försvar", url:"https://warontherocks.com/feed/" },
+  { id:"Lawfare",             cat:"Säkerhet/Försvar", url:"https://www.lawfaremedia.org/rss.xml" },
+  { id:"RUSI",                cat:"Säkerhet/Försvar", url:"https://www.rusi.org/rss.xml" },
+
+  // ── Balkan/Östeuropa ──────────────────────────────────────────────────────
+  { id:"Balkan Insight",      cat:"Balkan/Östeuropa", url:"https://balkaninsight.com/feed/" },
+  { id:"Civil.ge",            cat:"Balkan/Östeuropa", url:"https://civil.ge/feed" },
+  { id:"Emerging Europe",     cat:"Balkan/Östeuropa", url:"https://emerging-europe.com/feed/" },
+  { id:"Caucasian Journal",   cat:"Balkan/Östeuropa", url:"https://english.caucasianjournal.org/feeds/posts/default?alt=rss" },
+  { id:"BNN Latvia",          cat:"Balkan/Östeuropa", url:"https://bnn-news.com/feed" },
+
+  // ── Journalistik/Media ────────────────────────────────────────────────────
+  { id:"EJO",                 cat:"Journalistik",     url:"https://en.ejo.ch/feed" },
+  { id:"Sifted",              cat:"Journalistik",     url:"https://sifted.eu/rss" },
+  { id:"OCCRP",               cat:"Journalistik",     url:"https://www.occrp.org/en/rss" },
+  { id:"ISD Global",          cat:"Journalistik",     url:"https://www.isdglobal.org/feed/" },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // GOOGLE NEWS TEMAFLÖDEN — speglar GDELT-flikens kategorier
+  // Orangea etiketter i flödet
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── Informationskrigföring (GDELT: HYBRID) ────────────────────────────────
+  { id:"Hybrid warfare",       cat:"GN: Informationskrigföring", gn:true, url: GN("hybrid warfare hybrid threat") },
+  { id:"Information warfare",  cat:"GN: Informationskrigföring", gn:true, url: GN("information warfare information operation") },
+  { id:"Disinformation",       cat:"GN: Informationskrigföring", gn:true, url: GN("disinformation campaign Russia OR China OR Iran") },
+  { id:"Influence ops",        cat:"GN: Informationskrigföring", gn:true, url: GN("influence operation foreign interference") },
+  { id:"Cognitive warfare",    cat:"GN: Informationskrigföring", gn:true, url: GN("cognitive warfare perception management") },
+  { id:"FIMI",                 cat:"GN: Informationskrigföring", gn:true, url: GN("FIMI foreign information manipulation interference") },
+  { id:"Narrative warfare",    cat:"GN: Informationskrigföring", gn:true, url: GN("narrative warfare propaganda") },
+  { id:"Covert influence",     cat:"GN: Informationskrigföring", gn:true, url: GN("covert influence operation") },
+  { id:"Gray zone",            cat:"GN: Informationskrigföring", gn:true, url: GN("gray zone warfare geopolitics") },
+  { id:"Deception ops",        cat:"GN: Informationskrigföring", gn:true, url: GN("strategic deception military") },
+
+  // ── Cybersäkerhet (GDELT: INTEL + cyber) ──────────────────────────────────
+  { id:"APT Russia",           cat:"GN: Cybersäkerhet",          gn:true, url: GN("APT Russia cyberattack GRU FSB") },
+  { id:"APT China",            cat:"GN: Cybersäkerhet",          gn:true, url: GN("APT China cyber espionage PLA") },
+  { id:"Cyber espionage",      cat:"GN: Cybersäkerhet",          gn:true, url: GN("cyber espionage state sponsored") },
+  { id:"Gamaredon",            cat:"GN: Cybersäkerhet",          gn:true, url: GN("Gamaredon malware Ukraine") },
+  { id:"Ransomware state",     cat:"GN: Cybersäkerhet",          gn:true, url: GN("ransomware state sponsored critical infrastructure") },
+
+  // ── Kärnkraft (GDELT: NUCLEAR) ────────────────────────────────────────────
+  { id:"Nuclear security",     cat:"GN: Kärnkraft",              gn:true, url: GN("nuclear power plant security IAEA") },
+  { id:"Zaporizhzhia",         cat:"GN: Kärnkraft",              gn:true, url: GN("Zaporizhzhia nuclear plant") },
+  { id:"Nuclear threat",       cat:"GN: Kärnkraft",              gn:true, url: GN("nuclear threat Russia Belarus deterrence") },
+
+  // ── Drönare (GDELT: DRONE) ────────────────────────────────────────────────
+  { id:"Drone incidents",      cat:"GN: Drönare/UAV",            gn:true, url: GN("drone incursion attack infrastructure Europe") },
+  { id:"UAV warfare",          cat:"GN: Drönare/UAV",            gn:true, url: GN("UAV drone warfare Ukraine Russia") },
+  { id:"FPV drone",            cat:"GN: Drönare/UAV",            gn:true, url: GN("FPV drone attack loitering munition") },
+
+  // ── Kritisk infrastruktur (GDELT: INFRA) ──────────────────────────────────
+  { id:"Undersea cables",      cat:"GN: Kritisk infrastruktur",  gn:true, url: GN("undersea cable sabotage Baltic") },
+  { id:"Pipeline sabotage",    cat:"GN: Kritisk infrastruktur",  gn:true, url: GN("pipeline sabotage energy infrastructure") },
+  { id:"Power grid attack",    cat:"GN: Kritisk infrastruktur",  gn:true, url: GN("power grid attack telecom railway critical infrastructure") },
+
+  // ── Militärt (GDELT: MIL) ────────────────────────────────────────────────
+  { id:"Missile strike",       cat:"GN: Militärt",               gn:true, url: GN("missile strike ballistic cruise NATO Europe") },
+  { id:"Military exercise",    cat:"GN: Militärt",               gn:true, url: GN("military exercise NATO Russia border") },
+  { id:"Troop movements",      cat:"GN: Militärt",               gn:true, url: GN("troop movement border violation military buildup") },
+
+  // ── Spionage (GDELT: INTEL) ───────────────────────────────────────────────
+  { id:"Espionage arrests",    cat:"GN: Spionage/Underrättelse", gn:true, url: GN("espionage arrested spy Europe Russia China") },
+  { id:"Intelligence leaks",   cat:"GN: Spionage/Underrättelse", gn:true, url: GN("intelligence leak classified information") },
+  { id:"Foreign agent",        cat:"GN: Spionage/Underrättelse", gn:true, url: GN("foreign agent illegal intelligence recruitment") },
+
+  // ── Terrorism (GDELT: TERROR) ─────────────────────────────────────────────
+  { id:"Terror plot Europe",   cat:"GN: Terrorism",              gn:true, url: GN("terror plot arrested Europe extremism") },
+  { id:"ISIS Daesh",           cat:"GN: Terrorism",              gn:true, url: GN("ISIS Daesh Islamic State Europe attack") },
+  { id:"Far-right extremism",  cat:"GN: Terrorism",              gn:true, url: GN("far-right extremism terrorism Europe") },
+
+  // ── Säkerhetspolitik (GDELT: POLICY) ─────────────────────────────────────
+  { id:"NATO policy",          cat:"GN: Säkerhetspolitik",       gn:true, url: GN("NATO security policy defence spending") },
+  { id:"EU security",          cat:"GN: Säkerhetspolitik",       gn:true, url: GN("EU security policy sanctions defence") },
+  { id:"Nordic Baltic security",cat:"GN: Säkerhetspolitik",      gn:true, url: GN("Nordic Baltic security Sweden Finland NATO") },
+
+  // ── Maritim säkerhet (GDELT: MAR) ────────────────────────────────────────
+  { id:"Baltic Sea security",  cat:"GN: Maritim säkerhet",       gn:true, url: GN("Baltic Sea security shadow fleet sabotage") },
+  { id:"Shadow fleet",         cat:"GN: Maritim säkerhet",       gn:true, url: GN("shadow fleet Russia oil tanker sanctions") },
+  { id:"Maritime incidents",   cat:"GN: Maritim säkerhet",       gn:true, url: GN("maritime incident Black Sea Red Sea Hormuz AIS") },
+
+  // ── GPS/Elektronisk krigföring (GDELT: GPS) ───────────────────────────────
+  { id:"GPS jamming",          cat:"GN: GPS/Elektronisk krig",   gn:true, url: GN("GPS jamming GNSS spoofing interference Baltic") },
+  { id:"Electronic warfare",   cat:"GN: GPS/Elektronisk krig",   gn:true, url: GN("electronic warfare jamming navigation signal") },
+
+  // ── Rättsliga processer (GDELT: LEGAL) ───────────────────────────────────
+  { id:"Security law cases",   cat:"GN: Rättsliga processer",    gn:true, url: GN("indictment charged espionage security law Europe") },
+  { id:"War crimes tribunal",  cat:"GN: Rättsliga processer",    gn:true, url: GN("war crimes ICC tribunal Ukraine Russia") },
 ];
 
 const CATEGORIES = [...new Set(SOURCES.map(s => s.cat))];
@@ -216,9 +323,12 @@ const els = {
   progressBar:$("progressBar"), lastUpdated:$("lastUpdated"),
   visibleCount:$("visibleCount"), totalCount:$("totalCount"),
   counts:$("counts"), diagnostics:$("diagnostics"),
+  sourceCountNote:$("sourceCountNote"),
   selectAll:$("selectAll"), clearAll:$("clearAll"), fetchNow:$("fetchNow"),
   searchBox:$("searchBox"), sortMode:$("sortMode"), autoRefresh:$("autoRefresh"),
 };
+
+if(els.sourceCountNote) els.sourceCountNote.textContent = SOURCES.length;
 
 function esc(v){
   return String(v??"")
@@ -227,14 +337,11 @@ function esc(v){
 }
 function norm(v){return String(v??"").toLowerCase();}
 function delay(ms){return new Promise(r=>setTimeout(r,ms));}
-
 function stripHtml(html){
-  const d=document.createElement("div");
-  d.innerHTML=html||"";
+  const d=document.createElement("div");d.innerHTML=html||"";
   return (d.textContent||d.innerText||"").replace(/\s+/g," ").trim();
 }
 function trunc(s,n){s=s.trim();return s.length<=n?s:s.slice(0,n).trimEnd()+"…";}
-
 function parseDate(a){
   const raw=a.pubDate||"";if(!raw)return null;
   const d=new Date(raw);return isNaN(d.getTime())?null:d;
@@ -243,42 +350,49 @@ function formatDate(a){
   const dt=parseDate(a);if(!dt)return "okänd tid";
   return new Intl.DateTimeFormat("sv-SE",{dateStyle:"medium",timeStyle:"short"}).format(dt);
 }
-
 function appendDiag(line){
-  const stamp=new Intl.DateTimeFormat("sv-SE",{hour:"2-digit",minute:"2-digit",second:"2-digit"}).format(new Date());
+  const stamp=new Intl.DateTimeFormat("sv-SE",{
+    hour:"2-digit",minute:"2-digit",second:"2-digit"}).format(new Date());
   const row=`[${stamp}] ${line}`;
   els.diagnostics.textContent=els.diagnostics.textContent==="Ingen hämtning gjord ännu."
     ?row:els.diagnostics.textContent+"\n"+row;
   els.diagnostics.scrollTop=els.diagnostics.scrollHeight;
 }
-
 function setProgress(cur,tot){
   els.progressBar.style.width=(tot?Math.round(cur/tot*100):0)+"%";
 }
 
-// ── XML parser (RSS 2.0 + Atom) ────────────────────────────────────────────
+// ── XML parser: RSS 2.0 + Atom ─────────────────────────────────────────────
 function parseXml(xmlText, src){
   const doc=new DOMParser().parseFromString(xmlText,"application/xml");
   if(doc.querySelector("parsererror")) throw new Error("XML-parsfel");
   const isAtom=!!doc.querySelector("feed");
-  const items=Array.from(doc.querySelectorAll(isAtom?"entry":"item")).slice(0,25);
+  const items=Array.from(doc.querySelectorAll(isAtom?"entry":"item")).slice(0,20);
   return items.map(item=>{
     const t=tag=>{const el=item.querySelector(tag);return el?(el.textContent||"").trim():"";};
     const title=t("title")||"Artikel utan rubrik";
     const link=isAtom
-      ?(item.querySelector("link[rel='alternate']")?.getAttribute("href")||item.querySelector("link")?.getAttribute("href")||t("id"))
+      ?(item.querySelector("link[rel='alternate']")?.getAttribute("href")
+        ||item.querySelector("link")?.getAttribute("href")||t("id"))
       :(t("link")||t("guid")||"");
     const pubDate=t("pubDate")||t("published")||t("updated")||"";
     const desc=t("description")||t("summary")||t("content")||"";
+    // Google News: försök extrahera riktig URL ur description-HTML
+    let resolvedLink=link;
+    if(src.gn && link.includes("news.google.com")){
+      const m=desc.match(/href="(https?:\/\/(?!news\.google)[^"]+)"/);
+      if(m) resolvedLink=m[1];
+    }
     return {
-      sourceId:src.id, sourceCat:src.cat, title,
-      url:link, summary:trunc(stripHtml(desc),280),
-      pubDate, _key:link||norm(title)+src.id,
+      sourceId:src.id, sourceCat:src.cat, isGn:!!src.gn,
+      title, url:resolvedLink,
+      summary:trunc(stripHtml(desc),280),
+      pubDate, _key:resolvedLink||norm(title)+src.id,
     };
   });
 }
 
-// ── Fetch with proxy fallback ──────────────────────────────────────────────
+// ── Fetch med proxy-fallback ───────────────────────────────────────────────
 async function fetchWithProxy(src){
   for(let i=0;i<PROXIES.length;i++){
     const proxyUrl=PROXIES[i](src.url);
@@ -288,7 +402,6 @@ async function fetchWithProxy(src){
       const res=await fetch(proxyUrl,{signal:ctrl.signal});
       clearTimeout(tid);
       if(!res.ok) throw new Error(`HTTP ${res.status}`);
-      // allorigins returnerar JSON {contents:"<xml>"}; övriga returnerar råtext
       let xmlText;
       if(proxyUrl.includes("allorigins")){
         const json=await res.json();
@@ -306,23 +419,21 @@ async function fetchWithProxy(src){
         appendDiag(`${src.id}: misslyckades (${err.name==="AbortError"?"timeout":err.message})`);
         return [];
       }
-      // Prova nästa proxy
     }
   }
   return [];
 }
 
-// ── Fetch all – parallell i grupper om 4 ──────────────────────────────────
+// ── Hämta alla – 4 parallellt ──────────────────────────────────────────────
 async function fetchAll(){
   allArticles=[];
-  els.feed.innerHTML=`<div class="loading">Hämtar flöden…</div>`;
+  els.feed.innerHTML=`<div class="loading">Hämtar ${SOURCES.length} flöden…</div>`;
   els.diagnostics.textContent="Startar hämtning…";
   setProgress(0,SOURCES.length);
-  els.statusText.textContent=`Hämtar ${SOURCES.length} RSS-flöden…`;
+  els.statusText.textContent=`Hämtar ${SOURCES.length} flöden…`;
 
-  const CHUNK=4; // hämta 4 parallellt för att inte blockera proxyn
+  const CHUNK=4;
   const buffer=[];
-
   for(let i=0;i<SOURCES.length;i+=CHUNK){
     const batch=SOURCES.slice(i,i+CHUNK);
     const results=await Promise.all(batch.map(src=>fetchWithProxy(src)));
@@ -333,12 +444,11 @@ async function fetchAll(){
     renderFeed();
     await delay(300);
   }
-
   allArticles=dedupeArticles(buffer);
   setProgress(SOURCES.length,SOURCES.length);
   els.statusText.textContent=`Klar. ${allArticles.length} unika poster.`;
-  els.lastUpdated.textContent=`Senast uppdaterad: ${new Intl.DateTimeFormat("sv-SE",{
-    dateStyle:"medium",timeStyle:"short"}).format(new Date())}`;
+  els.lastUpdated.textContent=`Senast uppdaterad: ${
+    new Intl.DateTimeFormat("sv-SE",{dateStyle:"medium",timeStyle:"short"}).format(new Date())}`;
   renderFeed();
 }
 
@@ -353,11 +463,16 @@ function dedupeArticles(articles){
 function visibleArticles(){
   const q=norm(els.searchBox.value);
   let items=allArticles.filter(a=>selected.has(a.sourceCat));
-  if(q) items=items.filter(a=>norm([a.title,a.summary,a.sourceId,a.sourceCat].join(" ")).includes(q));
+  if(q) items=items.filter(a=>
+    norm([a.title,a.summary,a.sourceId,a.sourceCat].join(" ")).includes(q));
   const mode=els.sortMode.value;
-  if(mode==="date-desc") items.sort((a,b)=>(parseDate(b)?.getTime()||0)-(parseDate(a)?.getTime()||0));
-  else if(mode==="source") items.sort((a,b)=>a.sourceId.localeCompare(b.sourceId));
-  else items.sort((a,b)=>a.sourceCat.localeCompare(b.sourceCat)||(parseDate(b)?.getTime()||0)-(parseDate(a)?.getTime()||0));
+  if(mode==="date-desc")
+    items.sort((a,b)=>(parseDate(b)?.getTime()||0)-(parseDate(a)?.getTime()||0));
+  else if(mode==="source")
+    items.sort((a,b)=>a.sourceId.localeCompare(b.sourceId));
+  else
+    items.sort((a,b)=>a.sourceCat.localeCompare(b.sourceCat)||
+      (parseDate(b)?.getTime()||0)-(parseDate(a)?.getTime()||0));
   return items;
 }
 
@@ -365,7 +480,10 @@ function renderCounts(){
   const counts=Object.fromEntries(CATEGORIES.map(c=>[c,0]));
   for(const a of allArticles) counts[a.sourceCat]=(counts[a.sourceCat]||0)+1;
   els.counts.innerHTML=CATEGORIES.map(cat=>`
-    <div class="count"><strong>${counts[cat]||0}</strong><span>${esc(cat)}</span></div>`).join("");
+    <div class="count">
+      <strong>${counts[cat]||0}</strong>
+      <span>${esc(cat)}</span>
+    </div>`).join("");
   els.totalCount.textContent=`${allArticles.length} hämtade`;
 }
 
@@ -382,7 +500,7 @@ function renderFeed(){
   els.feed.innerHTML=items.map(a=>`
     <article class="article">
       <div class="topline">
-        <span class="badge">${esc(a.sourceCat)}</span>
+        <span class="badge${a.isGn?" gn":""}">${esc(a.sourceCat)}</span>
         <span class="source-badge">${esc(a.sourceId)}</span>
         <span>${esc(formatDate(a))}</span>
       </div>
@@ -391,7 +509,9 @@ function renderFeed(){
         :esc(a.title)}</h3>
       ${a.summary?`<p class="summary">${esc(a.summary)}</p>`:""}
       <div class="footer-actions">
-        ${a.url?`<a class="chip active" href="${esc(a.url)}" target="_blank" rel="noopener noreferrer">Öppna artikel</a>`:""}
+        ${a.url
+          ?`<a class="chip active" href="${esc(a.url)}" target="_blank" rel="noopener noreferrer">Öppna artikel</a>`
+          :""}
       </div>
     </article>`).join("");
 }
@@ -413,11 +533,15 @@ function renderChips(){
 function setupAutoRefresh(){
   if(autoTimer)clearInterval(autoTimer);
   if(els.autoRefresh.checked)
-    autoTimer=setInterval(()=>{if(document.visibilityState==="visible")fetchAll();},60*60*1000);
+    autoTimer=setInterval(()=>{
+      if(document.visibilityState==="visible")fetchAll();
+    },60*60*1000);
 }
 
-els.selectAll.addEventListener("click",()=>{selected=new Set(CATEGORIES);renderChips();renderFeed();});
-els.clearAll.addEventListener("click",()=>{selected.clear();renderChips();renderFeed();});
+els.selectAll.addEventListener("click",()=>{
+  selected=new Set(CATEGORIES);renderChips();renderFeed();});
+els.clearAll.addEventListener("click",()=>{
+  selected.clear();renderChips();renderFeed();});
 els.fetchNow.addEventListener("click",fetchAll);
 els.searchBox.addEventListener("input",renderFeed);
 els.sortMode.addEventListener("change",renderFeed);
